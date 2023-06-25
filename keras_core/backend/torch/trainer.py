@@ -227,13 +227,8 @@ class TorchTrainer(base_trainer.Trainer):
             steps_per_execution=self.steps_per_execution,
         )
 
-        needs_building = (
-            not all(layer.built for layer in self._flatten_layers())
-            or not self.optimizer.built
-            or (
-                self._compile_metrics is not None
-                and not self._compile_metrics.built
-            )
+        needs_building = not all(
+            layer.built for layer in self._flatten_layers()
         )
         if needs_building:
             # Build the model on one batch of data.
