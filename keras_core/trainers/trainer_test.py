@@ -8,6 +8,7 @@ from keras_core import initializers
 from keras_core import layers
 from keras_core import losses
 from keras_core import metrics
+from keras_core import operations as ops
 from keras_core import optimizers
 from keras_core import testing
 from keras_core.callbacks.callback import Callback
@@ -347,3 +348,105 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
         x1, x2 = np.random.rand(2, 3, 4)
         out = model.predict({"a": x1, "b": x2})
         self.assertEqual(out.shape, (3, 4))
+
+    def test_callback_methods_keys(self):
+        class CustomCallback(Callback):
+            def on_train_begin(self, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == []
+
+            def on_train_end(self, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == [
+                    "loss",
+                    "mean_absolute_error",
+                    "val_loss",
+                    "val_mean_absolute_error",
+                ]
+
+            def on_epoch_begin(self, epoch, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == []
+
+            def on_epoch_end(self, epoch, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == [
+                    "loss",
+                    "mean_absolute_error",
+                    "val_loss",
+                    "val_mean_absolute_error",
+                ]
+
+            def on_test_begin(self, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == []
+
+            def on_test_end(self, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == ["loss", "mean_absolute_error"]
+
+            def on_predict_begin(self, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == []
+
+            def on_predict_end(self, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == []
+
+            def on_train_batch_begin(self, batch, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == []
+
+            def on_train_batch_end(self, batch, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == ["loss", "mean_absolute_error"]
+
+            def on_test_batch_begin(self, batch, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == []
+
+            def on_test_batch_end(self, batch, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == ["loss", "mean_absolute_error"]
+
+            def on_predict_batch_begin(self, batch, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == []
+
+            def on_predict_batch_end(self, batch, logs=None):
+                keys = sorted(list(logs.keys()))
+                assert keys == ["outputs"]
+
+        model = ExampleModel(units=3)
+        model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+        x = np.ones((16, 4))
+        y = np.zeros((16, 3))
+        x_test = np.ones((16, 4))
+        y_test = np.zeros((16, 3))
+        model.fit(
+            x,
+            y,
+            callbacks=[CustomCallback()],
+            batch_size=4,
+            validation_data=(x_test, y_test),
+        )
+        model.evaluate(x_test, y_test, batch_size=4)
+        model.predict(x_test, batch_size=4)
+
+    def test_internal_only_loss(self):
+        class LossLayer(layers.Layer):
+            def call(self, x):
+                self.add_loss(ops.sum(x))
+                return x
+
+        model = keras_core.Sequential(
+            [
+                layers.Dense(2),
+                LossLayer(),
+                layers.Dense(1),
+            ]
+        )
+        model.compile(optimizer="adam")
+        x = np.ones((16, 2))
+        y = np.zeros((16, 1))
+        model.fit(x, y, batch_size=4)
