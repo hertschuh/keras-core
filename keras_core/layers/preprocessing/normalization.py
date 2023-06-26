@@ -265,7 +265,6 @@ class Normalization(Layer):
                 total_count += batch_count
                 batch_weight = float(batch_count) / total_count
                 existing_weight = 1.0 - batch_weight
-
                 new_total_mean = (
                     total_mean * existing_weight + batch_mean * batch_weight
                 )
@@ -297,12 +296,17 @@ class Normalization(Layer):
     def call(self, inputs):
         inputs = backend.convert_to_tensor(inputs, dtype=self.compute_dtype)
         if self.invert:
-            return self.mean + (
-                inputs * ops.maximum(ops.sqrt(self.variance), backend.epsilon())
+            return ops.add(
+                self.mean,
+                ops.multiply(
+                    inputs,
+                    ops.maximum(ops.sqrt(self.variance), backend.epsilon()),
+                ),
             )
         else:
-            return (inputs - self.mean) / ops.maximum(
-                ops.sqrt(self.variance), backend.epsilon()
+            return ops.divide(
+                ops.subtract(inputs, self.mean),
+                ops.maximum(ops.sqrt(self.variance), backend.epsilon()),
             )
 
     def compute_output_shape(self, input_shape):

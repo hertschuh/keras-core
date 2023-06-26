@@ -62,7 +62,6 @@ class KerasVariable:
     def _deferred_initialize(self):
         if self._value is not None:
             raise ValueError(f"Variable {self.name} is already initialized.")
-        from keras_core.backend.common.stateless_scope import in_stateless_scope
 
         if in_stateless_scope():
             raise ValueError(
@@ -383,12 +382,6 @@ PYTHON_DTYPES_MAP = {
     str: "string",
 }
 
-PYTHON_DTYPES_MAP = {
-    bool: "bool",
-    int: "int",  # TBD by backend
-    float: "float32",
-}
-
 
 def standardize_dtype(dtype):
     if dtype is None:
@@ -458,6 +451,11 @@ def shape_equal(a, b):
 def is_float_dtype(dtype):
     dtype = standardize_dtype(dtype)
     return dtype.startswith("float") or dtype.startswith("bfloat")
+
+
+def is_int_dtype(dtype):
+    dtype = standardize_dtype(dtype)
+    return dtype.startswith("int") or dtype.startswith("uint")
 
 
 def get_autocast_scope():

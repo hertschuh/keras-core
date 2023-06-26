@@ -1,6 +1,5 @@
 import math
 
-import jax
 import numpy as np
 import tensorflow as tf
 
@@ -12,15 +11,12 @@ except ImportError:
     pandas = None
 
 
-ARRAY_TYPES = (tf.Tensor, np.ndarray, jax.numpy.ndarray)
+# Leave jax, tf, and torch arrays off this list. Instead we will use
+# `__array__` to detect these types. Doing so allows us to avoid importing a
+# backend framework we are not currently using just to do type-checking.
+ARRAY_TYPES = (np.ndarray,)
 if pandas:
-    ARRAY_TYPES = ARRAY_TYPES + (
-        tf.Tensor,
-        np.ndarray,
-        pandas.Series,
-        pandas.DataFrame,
-    )
-# TODO: support torch tensors?
+    ARRAY_TYPES = ARRAY_TYPES + (pandas.Series, pandas.DataFrame)
 
 
 @keras_core_export("keras_core.utils.unpack_x_y_sample_weight")
@@ -205,10 +201,12 @@ def train_validation_split(arrays, validation_split):
 
 def class_weight_to_sample_weights(y, class_weight):
     sample_weight = np.ones(shape=(y.shape[0],), dtype=y.dtype)
-    if len(y.shape) > 1 and y.shape[-1] != 1:
-        y = np.argmax(y, axis=-1)
-    else:
-        y = np.round(np.squeeze(y, axis=-1)).astype("int32")
+    if len(y.shape) > 1:
+        if y.shape[-1] != 1:
+            y = np.argmax(y, axis=-1)
+        else:
+            y = np.squeeze(y, axis=-1)
+    y = np.round(y).astype("int32")
     for i in range(y.shape[0]):
         sample_weight[i] = class_weight.get(int(y[i]), 1.0)
     return sample_weight

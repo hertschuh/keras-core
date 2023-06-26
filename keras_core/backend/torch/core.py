@@ -18,6 +18,7 @@ TORCH_DTYPES = {
     "float32": torch.float32,
     "float64": torch.float64,
     "uint8": torch.uint8,
+    "uint16": torch.int32,  # TODO: Torch doesn't have `uint16` dtype.
     "uint32": torch.int64,  # TODO: Torch doesn't have `uint32` dtype.
     "int8": torch.int8,
     "int16": torch.int16,
@@ -46,7 +47,7 @@ def get_device():
 
 
 def to_torch_dtype(dtype):
-    if isinstance(dtype, torch.dtype):
+    if dtype in [value for key, value in TORCH_DTYPES.items()]:
         return dtype
     dtype = standardize_dtype(dtype)
     dtype = TORCH_DTYPES.get(dtype, None)
@@ -84,51 +85,72 @@ class Variable(KerasVariable):
         return func(*args, **kwargs)
 
     def __array__(self, dtype=None):
-        if self.value.requires_grad:
-            return self.value.detach().__array__(dtype)
-        return super().__array__(dtype)
+        value = convert_to_numpy(self.value)
+        if dtype:
+            return value.astype(dtype)
+        return value
 
     @property
     def value(self):
         value = super().value
         # Create and use a symbolic tensor stub in symbolic calls.
-        if get_device() == "meta" and value.device != "meta":
-            return torch.randn(
+        if get_device() == "meta" and str(value.device) != "meta":
+            return torch.empty(
                 size=value.shape,
                 dtype=value.dtype,
                 device="meta",
             )
         return value
 
+    def __eq__(self, other):
+        try:
+            return super().__eq__(other)
+        except Exception:
+            return False
+
 
 def convert_to_tensor(x, dtype=None):
     dtype = to_torch_dtype(dtype or getattr(x, "dtype", None))
+    device = get_device()
+    if isinstance(x, int):
+        dtype = torch.int32
+    if isinstance(x, float):
+        dtype = torch.float32
     if isinstance(x, Variable):
-        x = x.value
+        # TorchDynamo has bugs supporting nn.Parameter type check.
+        # Return it directly instead of pass it to the rest of the logic in the
+        # function.
+        return x.value
     if is_tensor(x):
         if dtype and dtype != x.dtype:
             x = x.to(dtype)
-        return x.to(get_device())
+        return x.to(device)
 
     # Convert to np in case of any array-like that is not list or tuple.
     if not isinstance(x, (list, tuple)):
         x = np.array(x)
-    elif len(x) > 0 and isinstance(x[0], torch.Tensor):
+    elif len(x) > 0 and any(isinstance(x1, torch.Tensor) for x1 in x):
         # Handle list or tuple of torch tensors
-        return torch.stack(x)
-
-    return torch.as_tensor(x, dtype=dtype, device=get_device())
+        return torch.stack([convert_to_tensor(x1) for x1 in x])
+    if isinstance(x, np.ndarray) and x.dtype == np.uint32:
+        # Torch backend does not support uint32.
+        x = x.astype(np.int64)
+    return torch.as_tensor(x, dtype=dtype, device=device)
 
 
 def convert_to_numpy(x):
-    if isinstance(x, KerasVariable):
-        x = x.value
-    if is_tensor(x) and x.is_cuda:
-        # Tensor has to be moved to CPU before converting to numpy.
-        x = x.cpu()
-    if is_tensor(x) and x.requires_grad:
-        return x.detach().numpy()
-    return np.array(x)
+    def transform(x):
+        if is_tensor(x):
+            if x.requires_grad:
+                x = x.detach()
+            # Tensor has to be moved to CPU before converting to numpy.
+            if x.is_cuda:
+                x = x.cpu()
+        return np.array(x)
+
+    if isinstance(x, (list, tuple)):
+        return np.array([transform(e) for e in x])
+    return transform(x)
 
 
 def is_tensor(x):
@@ -170,7 +192,7 @@ def compute_output_spec(fn, *args, **kwargs):
                     for i, e in enumerate(shape):
                         if e is None:
                             shape[i] = fill_value
-                return torch.randn(
+                return torch.empty(
                     size=shape,
                     dtype=TORCH_DTYPES[x.dtype],
                     device=get_device(),
@@ -216,6 +238,10 @@ def compute_output_spec(fn, *args, **kwargs):
 
 
 def cond(pred, true_fn, false_fn):
+    # When symbolic execution, take pred as true.
+    if get_device() == "meta":
+        return true_fn()
+
     if pred:
         return true_fn()
     return false_fn()
@@ -228,7 +254,7 @@ def vectorized_map(function, elements):
 def scatter(indices, values, shape):
     indices = convert_to_tensor(indices)
     values = convert_to_tensor(values)
-    zeros = torch.zeros(shape, dtype=values.dtype)
+    zeros = torch.zeros(shape, dtype=values.dtype, device=get_device())
 
     index_length = indices.shape[-1]
     value_shape = shape[index_length:]
@@ -251,18 +277,34 @@ def scatter_update(inputs, indices, updates):
     return inputs
 
 
-def block_update(inputs, start_indices, updates):
+def slice(inputs, start_indices, shape):
+    shape_dtype = to_torch_dtype("int64")
     inputs = convert_to_tensor(inputs)
-    start_indices = convert_to_tensor(start_indices, dtype="int64")
+    start_indices = convert_to_tensor(start_indices).to(shape_dtype)
+    shape = convert_to_tensor(shape).to(shape_dtype)
+
+    python_slice = __builtins__["slice"]
+    slices = [
+        python_slice(start_index, start_index + length)
+        for start_index, length in zip(start_indices, shape)
+    ]
+    return inputs[slices]
+
+
+def slice_update(inputs, start_indices, updates):
+    shape_dtype = to_torch_dtype("int64")
+    inputs = convert_to_tensor(inputs)
+    start_indices = convert_to_tensor(start_indices).to(shape_dtype)
     updates = convert_to_tensor(updates)
 
-    update_shape = updates.shape
+    python_slice = __builtins__["slice"]
     slices = [
-        slice(start_index, start_index + update_length)
-        for start_index, update_length in zip(start_indices, update_shape)
+        python_slice(start_index, start_index + update_length)
+        for start_index, update_length in zip(start_indices, updates.shape)
     ]
-    inputs[slices] = updates
-    return inputs
+    outputs = torch.clone(inputs)
+    outputs[slices] = updates
+    return outputs
 
 
 def while_loop(
