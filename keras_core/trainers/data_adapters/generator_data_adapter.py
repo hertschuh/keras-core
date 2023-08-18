@@ -38,6 +38,10 @@ class GeneratorDataAdapter(DataAdapter):
                 )
             shape = list(shape)
             shape[0] = None  # The batch size is not guaranteed to be static.
+            if isinstance(x, tf.RaggedTensor):
+                return tf.RaggedTensorSpec(shape=shape, dtype=x.dtype.name)
+            if isinstance(x, tf.SparseTensor):
+                return tf.SparseTensorSpec(shape=shape, dtype=x.dtype.name)
             return tf.TensorSpec(shape=shape, dtype=x.dtype.name)
 
         self._output_signature = tree.map_structure(get_tensor_spec, data)

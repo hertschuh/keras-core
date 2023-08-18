@@ -23,6 +23,41 @@ class MergingLayersTest(testing.TestCase):
             supports_masking=True,
         )
 
+    @pytest.mark.skipif(
+        not backend.SUPPORTS_SPARSE_TENSORS,
+        reason="Backend does not support sparse tensors.",
+    )
+    def test_add_sparse(self):
+        import tensorflow as tf
+
+        # Adding sparse tensors produces a sparse tensor
+        self.run_layer_test(
+            layers.Add,
+            init_kwargs={},
+            input_shape=[(2, 3), (2, 3)],
+            input_sparse=True,
+            expected_output_shape=(2, 3),
+            expected_output_sparse=True,
+            expected_num_trainable_weights=0,
+            expected_num_non_trainable_weights=0,
+            expected_num_seed_generators=0,
+            expected_num_losses=0,
+            supports_masking=True,
+            run_training_check=False,
+            run_mixed_precision_check=False,
+        )
+
+        # Adding a sparse tensor with a dense tensor, or a dense tensor with a
+        # sparse tensor produces a dense tensor
+        x1 = tf.SparseTensor(
+            indices=[[0, 0], [1, 2]], values=[1.0, 2.0], dense_shape=(2, 3)
+        )
+        x2 = tf.ones((2, 3))
+        expected_output = tf.sparse.to_dense(x1) + x2
+
+        self.assertAllClose(layers.Add()([x1, x2]), expected_output)
+        self.assertAllClose(layers.Add()([x2, x1]), expected_output)
+
     def test_add_correctness_dynamic(self):
         x1 = np.random.rand(2, 4, 5)
         x2 = np.random.rand(2, 4, 5)

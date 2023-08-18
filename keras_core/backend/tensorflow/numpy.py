@@ -5,6 +5,8 @@ from keras_core.backend.tensorflow.core import convert_to_tensor
 
 
 def add(x1, x2):
+    if isinstance(x1, tf.SparseTensor) or isinstance(x2, tf.SparseTensor):
+        return tf.sparse.add(x1, x2)
     return tfnp.add(x1, x2)
 
 
@@ -36,10 +38,30 @@ def einsum(subscripts, *operands, **kwargs):
 
 
 def subtract(x1, x2):
+    if isinstance(x1, tf.SparseTensor) or isinstance(x2, tf.SparseTensor):
+        minus_x2 = tf.SparseTensor(
+            indices=x2.indices, values=-x2.values, dense_shape=x2.dense_shape
+        )
+        return tf.sparse.add(x1, minus_x2)
     return tfnp.subtract(x1, x2)
 
 
 def matmul(x1, x2):
+    if isinstance(x1, tf.SparseTensor):
+        # We need at least one id per rows fo embedding_lookup_sparse to work
+        x1, _ = tf.sparse.fill_empty_rows(x1, 0)
+        # We need to split x1 into separate ids and weights tensors. The ids
+        # should be the column indices of x1 and the values of the weights
+        # can continue to be the actual x1. The column arrangement of ids and
+        # weights does not matter as we sum over columns. See documentation for
+        # sparse_ops.sparse_tensor_dense_matmul for details.
+        ids = tf.SparseTensor(
+            indices=x1.indices,
+            values=x1.indices[:, 1],
+            dense_shape=x1.dense_shape,
+        )
+        weights = x1
+        return tf.nn.embedding_lookup_sparse(x2, ids, weights, combiner="sum")
     return tfnp.matmul(x1, x2)
 
 
@@ -506,6 +528,8 @@ def repeat(x, repeats, axis=None):
 
 
 def reshape(x, new_shape):
+    if isinstance(x, tf.SparseTensor):
+        return tf.sparse.reshape(x, new_shape)
     return tfnp.reshape(x, new_shape)
 
 
@@ -550,6 +574,12 @@ def swapaxes(x, axis1, axis2):
 
 
 def take(x, indices, axis=None):
+    if isinstance(indices, tf.SparseTensor):
+        return tf.nn.safe_embedding_lookup_sparse(
+            embedding_weights=x,
+            sparse_ids=tf.sparse.expand_dims(indices, axis=-1),
+            default_id=0,
+        )
     return tfnp.take(x, indices, axis=axis)
 
 

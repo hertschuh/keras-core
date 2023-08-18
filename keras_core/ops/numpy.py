@@ -303,7 +303,9 @@ class Add(Operation):
         x1_shape = getattr(x1, "shape", [])
         x2_shape = getattr(x2, "shape", [])
         output_shape = broadcast_shapes(x1_shape, x2_shape)
-        return KerasTensor(output_shape, dtype=x1.dtype)
+        return KerasTensor(
+            output_shape, dtype=x1.dtype, sparse=(x1.sparse and x2.sparse)
+        )
 
 
 @keras_core_export(["keras_core.ops.add", "keras_core.ops.numpy.add"])
@@ -4163,7 +4165,7 @@ class Reshape(Operation):
         output_shape = operation_utils.compute_reshape_output_shape(
             x.shape, self.new_shape, "new_shape"
         )
-        return KerasTensor(output_shape, dtype=x.dtype)
+        return KerasTensor(output_shape, dtype=x.dtype, sparse=x.sparse)
 
 
 @keras_core_export(["keras_core.ops.reshape", "keras_core.ops.numpy.reshape"])
@@ -5080,7 +5082,9 @@ class Subtract(Operation):
         x1_shape = getattr(x1, "shape", [])
         x2_shape = getattr(x2, "shape", [])
         output_shape = broadcast_shapes(x1_shape, x2_shape)
-        return KerasTensor(output_shape, dtype=x1.dtype)
+        return KerasTensor(
+            output_shape, dtype=x1.dtype, sparse=(x1.sparse and x2.sparse)
+        )
 
 
 @keras_core_export(["keras_core.ops.subtract", "keras_core.ops.numpy.subtract"])

@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from keras_core import backend
 from keras_core import layers
 from keras_core.testing import test_case
 
@@ -31,6 +32,25 @@ class EmbeddingTest(test_case.TestCase):
             expected_num_seed_generators=0,
             expected_num_losses=0,
             supports_masking=True,
+        )
+
+    @pytest.mark.skipif(
+        not backend.SUPPORTS_SPARSE_TENSORS,
+        reason="Backend does not support sparse tensors.",
+    )
+    def test_sparse(self):
+        self.run_layer_test(
+            layers.Embedding,
+            {"input_dim": 5, "output_dim": 4},
+            input_shape=(2, 3),
+            input_dtype="int32",
+            input_sparse=True,
+            expected_output_shape=(2, 3, 4),
+            expected_num_trainable_weights=1,
+            expected_num_non_trainable_weights=0,
+            expected_num_seed_generators=0,
+            expected_num_losses=0,
+            supports_masking=False,
         )
 
     def test_correctness(self):

@@ -1,4 +1,6 @@
+from keras_core import ops
 from keras_core.api_export import keras_core_export
+from keras_core.backend.common.keras_tensor import KerasTensor
 from keras_core.layers.merging.base_merge import Merge
 
 
@@ -32,8 +34,15 @@ class Add(Merge):
     def _merge_function(self, inputs):
         output = inputs[0]
         for i in range(1, len(inputs)):
-            output = output + inputs[i]
+            output = ops.add(output, inputs[i])
         return output
+
+    def compute_output_spec(self, inputs):
+        output_shape = self.compute_output_shape([x.shape for x in inputs])
+        output_sparse = all(x.sparse for x in inputs)
+        return KerasTensor(
+            output_shape, dtype=self.compute_dtype, sparse=output_sparse
+        )
 
 
 @keras_core_export("keras_core.layers.add")

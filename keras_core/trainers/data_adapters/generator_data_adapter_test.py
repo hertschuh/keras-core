@@ -3,6 +3,7 @@ import math
 import numpy as np
 import tensorflow as tf
 from absl.testing import parameterized
+from scipy import sparse as scipy_sparse
 
 from keras_core import testing
 from keras_core.trainers.data_adapters import generator_data_adapter
@@ -88,3 +89,65 @@ class GeneratorDataAdapterTest(testing.TestCase, parameterized.TestCase):
             for i in range(by.shape[0]):
                 sample_order.append(by[i, 0])
         self.assertAllClose(sample_order, list(range(64)))
+
+    def test_tf_sparse(self):
+        def generate_tf():
+            for i in range(4):
+                x = tf.SparseTensor(
+                    indices=[[0, 0], [1, 2]],
+                    values=[1.0, 2.0],
+                    dense_shape=(2, 4),
+                )
+                y = tf.SparseTensor(
+                    indices=[[0, 0], [1, 1]],
+                    values=[3.0, 4.0],
+                    dense_shape=(2, 2),
+                )
+                yield x, y
+
+        # adapter = generator_data_adapter.GeneratorDataAdapter(generate_tf())
+        # gen = adapter.get_numpy_iterator()
+        # for batch in gen:
+        #     self.assertEqual(len(batch), 2)
+        #     bx, by = batch
+        #     self.assertTrue(scipy_sparse.issparse(bx))
+        #     self.assertTrue(scipy_sparse.issparse(by))
+        #     self.assertEqual(bx.shape, (2, 4))
+        #     self.assertEqual(by.shape, (2, 2))
+
+        adapter = generator_data_adapter.GeneratorDataAdapter(generate_tf())
+        ds = adapter.get_tf_dataset()
+        for batch in ds:
+            self.assertEqual(len(batch), 2)
+            bx, by = batch
+            self.assertIsInstance(bx, tf.SparseTensor)
+            self.assertIsInstance(by, tf.SparseTensor)
+            self.assertEqual(bx.shape, (2, 4))
+            self.assertEqual(by.shape, (2, 2))
+
+    def test_scipy_sparse(self):
+        def generate_scipy():
+            for i in range(4):
+                x = scipy_sparse.random(2, 4, density=0.25, dtype="float")
+                y = scipy_sparse.random(2, 2, density=0.25, dtype="float")
+                yield x, y
+
+        adapter = generator_data_adapter.GeneratorDataAdapter(generate_scipy())
+        gen = adapter.get_numpy_iterator()
+        for batch in gen:
+            self.assertEqual(len(batch), 2)
+            bx, by = batch
+            self.assertTrue(scipy_sparse.issparse(bx))
+            self.assertTrue(scipy_sparse.issparse(by))
+            self.assertEqual(bx.shape, (2, 4))
+            self.assertEqual(by.shape, (2, 2))
+
+        # adapter = generator_data_adapter.GeneratorDataAdapter(generate_scipy())
+        # ds = adapter.get_tf_dataset()
+        # for batch in ds:
+        #     self.assertEqual(len(batch), 2)
+        #     bx, by = batch
+        #     self.assertIsInstance(bx, tf.SparseTensor)
+        #     self.assertIsInstance(by, tf.SparseTensor)
+        #     self.assertEqual(bx.shape, (2, 4))
+        #     self.assertEqual(by.shape, (2, 2))

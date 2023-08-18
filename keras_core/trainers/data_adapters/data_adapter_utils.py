@@ -19,7 +19,7 @@ ARRAY_TYPES = (np.ndarray,)
 if backend.backend() == "tensorflow":
     from keras_core.utils.module_utils import tensorflow as tf
 
-    ARRAY_TYPES = ARRAY_TYPES + (np.ndarray, tf.RaggedTensor)
+    ARRAY_TYPES = ARRAY_TYPES + (np.ndarray, tf.RaggedTensor, tf.SparseTensor)
 if pandas:
     ARRAY_TYPES = ARRAY_TYPES + (pandas.Series, pandas.DataFrame)
 
@@ -117,7 +117,12 @@ def list_to_tuple(maybe_list):
 
 
 def check_data_cardinality(data):
-    num_samples = set(int(i.shape[0]) for i in tree.flatten(data))
+    num_samples = set()
+    for x in tree.flatten(data):
+        if is_tf_sparse_tensor(x):
+            num_samples.add(x.dense_shape[0].numpy())
+        else:
+            num_samples.add(x.shape[0])
     if len(num_samples) > 1:
         msg = (
             "Data cardinality is ambiguous. "
@@ -215,3 +220,11 @@ def class_weight_to_sample_weights(y, class_weight):
     for i in range(y.shape[0]):
         sample_weight[i] = class_weight.get(int(y[i]), 1.0)
     return sample_weight
+
+
+def is_tf_ragged_tensor(x):
+    return x.__class__.__name__ == "RaggedTensor"
+
+
+def is_tf_sparse_tensor(x):
+    return x.__class__.__name__ == "SparseTensor"

@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 from keras_core import backend
+from keras_core import optimizers
 from keras_core.optimizers import base_optimizer
 
 
@@ -13,6 +14,18 @@ class TFOptimizer(base_optimizer.BaseOptimizer):
     which provide distribute specific functionality, e.g. variable
     creation, loss reduction, etc.
     """
+
+    def __new__(cls, *args, **kwargs):
+        # Import locally to avoid circular imports.
+        from keras_core.backend.tensorflow.optimizers import tf_sgd
+
+        OPTIMIZERS = {
+            optimizers.SGD: tf_sgd.SGD,
+        }
+
+        if cls in OPTIMIZERS:
+            return OPTIMIZERS[cls](*args, **kwargs)
+        return super().__new__(cls)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -82,7 +95,11 @@ class TFOptimizer(base_optimizer.BaseOptimizer):
 
         def apply_grad_to_update_var(var, grad):
             learning_rate = self._get_current_learning_rate()
-            grad = tf.convert_to_tensor(grad)
+            if isinstance(grad, tf.IndexedSlices):
+                if hasattr(self.__class__, "_sparse_update_step"):
+                    return self._sparse_update_step(grad, var, learning_rate)
+                else:
+                    grad = tf.convert_to_tensor(grad)
             return self.update_step(grad, var, learning_rate)
 
         for grad, var in grads_and_vars:

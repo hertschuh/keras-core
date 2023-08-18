@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from absl.testing import parameterized
+from scipy import sparse as scipy_sparse
 
 import keras_core
 from keras_core import backend
@@ -197,6 +198,28 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
             [14.402393, 10.991339, 8.388159],
             atol=6.1051628e-1,
         )
+
+    def test_fit_sparse(self):
+        def generate_scipy():
+            for i in range(4):
+                x = scipy_sparse.random(2, 4, density=0.25, dtype="float")
+                y = scipy_sparse.random(2, 3, density=0.25, dtype="float")
+                yield x, y
+
+        model = ExampleModel(units=3)
+        epochs = 3
+        batch_size = 20
+        steps_per_epoch = 7
+        dataset_size = batch_size * (steps_per_epoch - 2)
+
+        model.compile(
+            optimizer=optimizers.SGD(),
+            loss=losses.MeanSquaredError(),
+            metrics=[metrics.MeanSquaredError()],
+            run_eagerly=True,  # run_eagerly,
+            jit_compile=False,
+        )
+        model.fit(generate_scipy(), shuffle=False)
 
     @parameterized.named_parameters(
         [

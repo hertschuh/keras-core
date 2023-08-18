@@ -3,7 +3,7 @@ from keras_core.api_export import keras_core_export
 from keras_core.optimizers import base_optimizer
 
 if backend.backend() == "tensorflow":
-    from keras_core.backend.tensorflow.optimizer import TFOptimizer
+    from keras_core.backend.tensorflow.optimizers import TFOptimizer
 
     BackendOptimizer = TFOptimizer
 elif backend.backend() == "torch":

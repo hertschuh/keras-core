@@ -301,7 +301,9 @@ def convert_to_arrays(arrays, dtype=None):
                 x = np.expand_dims(x.to_numpy(dtype=dtype), axis=-1)
             elif isinstance(x, pandas.DataFrame):
                 x = x.to_numpy(dtype=dtype)
-        if is_tf_ragged_tensor(x):
+        if data_adapter_utils.is_tf_ragged_tensor(
+            x
+        ) or data_adapter_utils.is_tf_sparse_tensor(x):
             from keras_core.utils.module_utils import tensorflow as tf
 
             return tf.cast(x, dtype=dtype)
@@ -326,7 +328,3 @@ def convert_to_arrays(arrays, dtype=None):
 
     arrays = tree.map_structure(convert_single_array, arrays)
     return lists_to_tuples(arrays)
-
-
-def is_tf_ragged_tensor(x):
-    return x.__class__.__name__ == "RaggedTensor"
